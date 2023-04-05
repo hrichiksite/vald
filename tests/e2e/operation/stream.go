@@ -172,6 +172,7 @@ func (c *client) SearchWithParameters(
 				Num:       num,
 				Radius:    radius,
 				Epsilon:   epsilon,
+				Ratio:     1,
 				Timeout:   timeout,
 			},
 		})
@@ -286,6 +287,7 @@ func (c *client) SearchByIDWithParameters(
 				Num:       num,
 				Radius:    radius,
 				Epsilon:   epsilon,
+				Ratio:     1,
 				Timeout:   timeout,
 			},
 		})
@@ -406,6 +408,7 @@ func (c *client) LinearSearchWithParameters(
 				RequestId: id,
 				Num:       num,
 				Timeout:   timeout,
+				Ratio:     1,
 			},
 		})
 		if err != nil {
@@ -514,6 +517,7 @@ func (c *client) LinearSearchByIDWithParameters(
 				RequestId: id,
 				Num:       num,
 				Timeout:   timeout,
+				Ratio:     1,
 			},
 		})
 		if err != nil {

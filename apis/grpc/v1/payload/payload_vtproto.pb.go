@@ -363,11 +363,6 @@ func (m *Search_Config) MarshalToSizedBufferVT(dAtA []byte) (int, error) {
 		i -= len(m.unknownFields)
 		copy(dAtA[i:], m.unknownFields)
 	}
-	if m.MinNum != 0 {
-		i = encodeVarint(dAtA, i, uint64(m.MinNum))
-		i--
-		dAtA[i] = 0x40
-	}
 	if m.EgressFilters != nil {
 		size, err := m.EgressFilters.MarshalToSizedBufferVT(dAtA[:i])
 		if err != nil {
@@ -376,7 +371,7 @@ func (m *Search_Config) MarshalToSizedBufferVT(dAtA []byte) (int, error) {
 		i -= size
 		i = encodeVarint(dAtA, i, uint64(size))
 		i--
-		dAtA[i] = 0x3a
+		dAtA[i] = 0x62
 	}
 	if m.IngressFilters != nil {
 		size, err := m.IngressFilters.MarshalToSizedBufferVT(dAtA[:i])
@@ -386,24 +381,45 @@ func (m *Search_Config) MarshalToSizedBufferVT(dAtA []byte) (int, error) {
 		i -= size
 		i = encodeVarint(dAtA, i, uint64(size))
 		i--
-		dAtA[i] = 0x32
+		dAtA[i] = 0x5a
+	}
+	if m.DisableAsyncRerank {
+		i--
+		if m.DisableAsyncRerank {
+			dAtA[i] = 1
+		} else {
+			dAtA[i] = 0
+		}
+		i--
+		dAtA[i] = 0x40
 	}
 	if m.Timeout != 0 {
 		i = encodeVarint(dAtA, i, uint64(m.Timeout))
 		i--
-		dAtA[i] = 0x28
+		dAtA[i] = 0x38
+	}
+	if m.Ratio != 0 {
+		i -= 4
+		binary.LittleEndian.PutUint32(dAtA[i:], uint32(math.Float32bits(float32(m.Ratio))))
+		i--
+		dAtA[i] = 0x35
 	}
 	if m.Epsilon != 0 {
 		i -= 4
 		binary.LittleEndian.PutUint32(dAtA[i:], uint32(math.Float32bits(float32(m.Epsilon))))
 		i--
-		dAtA[i] = 0x25
+		dAtA[i] = 0x2d
 	}
 	if m.Radius != 0 {
 		i -= 4
 		binary.LittleEndian.PutUint32(dAtA[i:], uint32(math.Float32bits(float32(m.Radius))))
 		i--
-		dAtA[i] = 0x1d
+		dAtA[i] = 0x25
+	}
+	if m.MinNum != 0 {
+		i = encodeVarint(dAtA, i, uint64(m.MinNum))
+		i--
+		dAtA[i] = 0x18
 	}
 	if m.Num != 0 {
 		i = encodeVarint(dAtA, i, uint64(m.Num))
@@ -3712,14 +3728,23 @@ func (m *Search_Config) SizeVT() (n int) {
 	if m.Num != 0 {
 		n += 1 + sov(uint64(m.Num))
 	}
+	if m.MinNum != 0 {
+		n += 1 + sov(uint64(m.MinNum))
+	}
 	if m.Radius != 0 {
 		n += 5
 	}
 	if m.Epsilon != 0 {
 		n += 5
 	}
+	if m.Ratio != 0 {
+		n += 5
+	}
 	if m.Timeout != 0 {
 		n += 1 + sov(uint64(m.Timeout))
+	}
+	if m.DisableAsyncRerank {
+		n += 2
 	}
 	if m.IngressFilters != nil {
 		l = m.IngressFilters.SizeVT()
@@ -3728,9 +3753,6 @@ func (m *Search_Config) SizeVT() (n int) {
 	if m.EgressFilters != nil {
 		l = m.EgressFilters.SizeVT()
 		n += 1 + l + sov(uint64(l))
-	}
-	if m.MinNum != 0 {
-		n += 1 + sov(uint64(m.MinNum))
 	}
 	n += len(m.unknownFields)
 	return n
@@ -5661,6 +5683,25 @@ func (m *Search_Config) UnmarshalVT(dAtA []byte) error {
 				}
 			}
 		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field MinNum", wireType)
+			}
+			m.MinNum = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.MinNum |= uint32(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 4:
 			if wireType != 5 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Radius", wireType)
 			}
@@ -5671,7 +5712,7 @@ func (m *Search_Config) UnmarshalVT(dAtA []byte) error {
 			v = uint32(binary.LittleEndian.Uint32(dAtA[iNdEx:]))
 			iNdEx += 4
 			m.Radius = float32(math.Float32frombits(v))
-		case 4:
+		case 5:
 			if wireType != 5 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Epsilon", wireType)
 			}
@@ -5682,7 +5723,18 @@ func (m *Search_Config) UnmarshalVT(dAtA []byte) error {
 			v = uint32(binary.LittleEndian.Uint32(dAtA[iNdEx:]))
 			iNdEx += 4
 			m.Epsilon = float32(math.Float32frombits(v))
-		case 5:
+		case 6:
+			if wireType != 5 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Ratio", wireType)
+			}
+			var v uint32
+			if (iNdEx + 4) > l {
+				return io.ErrUnexpectedEOF
+			}
+			v = uint32(binary.LittleEndian.Uint32(dAtA[iNdEx:]))
+			iNdEx += 4
+			m.Ratio = float32(math.Float32frombits(v))
+		case 7:
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Timeout", wireType)
 			}
@@ -5701,7 +5753,27 @@ func (m *Search_Config) UnmarshalVT(dAtA []byte) error {
 					break
 				}
 			}
-		case 6:
+		case 8:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field DisableAsyncRerank", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.DisableAsyncRerank = bool(v != 0)
+		case 11:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field IngressFilters", wireType)
 			}
@@ -5737,7 +5809,7 @@ func (m *Search_Config) UnmarshalVT(dAtA []byte) error {
 				return err
 			}
 			iNdEx = postIndex
-		case 7:
+		case 12:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field EgressFilters", wireType)
 			}
@@ -5773,25 +5845,6 @@ func (m *Search_Config) UnmarshalVT(dAtA []byte) error {
 				return err
 			}
 			iNdEx = postIndex
-		case 8:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field MinNum", wireType)
-			}
-			m.MinNum = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflow
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				m.MinNum |= uint32(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
 		default:
 			iNdEx = preIndex
 			skippy, err := skip(dAtA[iNdEx:])

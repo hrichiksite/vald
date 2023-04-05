@@ -25,3 +25,7 @@ func Sort[E constraints.Ordered](x []E) {
 func SortFunc[E any](x []E, less func(left, right E) bool) {
 	slices.SortFunc(x, less)
 }
+
+func CompactFunc[S ~[]E, E any](s S, eq func(E, E) bool) S {
+	return slices.CompactFunc(s, eq)
+}

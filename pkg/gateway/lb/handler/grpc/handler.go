@@ -297,20 +297,23 @@ func (s *server) Search(ctx context.Context, req *payload.Search_Request) (res *
 		return nil, err
 	}
 	cfg := req.GetConfig()
-	mn := cfg.GetMinNum()
+	cfg = &payload.Search_Config{
+		RequestId:          cfg.GetRequestId(),
+		Num:                cfg.GetNum(),
+		MinNum:             cfg.GetMinNum(),
+		Radius:             cfg.GetRadius(),
+		Epsilon:            cfg.GetEpsilon(),
+		Ratio:              cfg.GetRatio(),
+		Timeout:            cfg.GetTimeout(),
+		DisableAsyncRerank: cfg.GetDisableAsyncRerank(),
+		IngressFilters:     cfg.GetIngressFilters(),
+		EgressFilters:      cfg.GetEgressFilters(),
+	}
 	if req.Config != nil {
+		req.Config.Num = s.calculateNum(ctx, cfg.GetNum(), cfg.GetRatio())
 		req.Config.MinNum = 0
 	}
-	res, err = s.doSearch(ctx, &payload.Search_Config{
-		RequestId:      cfg.GetRequestId(),
-		Num:            cfg.GetNum(),
-		MinNum:         mn,
-		Radius:         cfg.GetRadius(),
-		Epsilon:        cfg.GetEpsilon(),
-		Timeout:        cfg.GetTimeout(),
-		IngressFilters: cfg.GetIngressFilters(),
-		EgressFilters:  cfg.GetEgressFilters(),
-	}, func(ctx context.Context, vc vald.Client, copts ...grpc.CallOption) (*payload.Search_Response, error) {
+	res, err = s.doSearch(ctx, cfg, func(ctx context.Context, vc vald.Client, copts ...grpc.CallOption) (*payload.Search_Response, error) {
 		return vc.Search(ctx, req, copts...)
 	})
 	if err != nil {
@@ -370,21 +373,6 @@ func (s *server) SearchByID(ctx context.Context, req *payload.Search_IDRequest) 
 		return nil, err
 	}
 	vec, err := s.getObject(ctx, uuid)
-	cfg := req.GetConfig()
-	mn := cfg.GetMinNum()
-	if req.Config != nil {
-		req.Config.MinNum = 0
-	}
-	scfg := &payload.Search_Config{
-		RequestId:      cfg.GetRequestId(),
-		Num:            cfg.GetNum(),
-		MinNum:         mn,
-		Radius:         cfg.GetRadius(),
-		Epsilon:        cfg.GetEpsilon(),
-		Timeout:        cfg.GetTimeout(),
-		IngressFilters: cfg.GetIngressFilters(),
-		EgressFilters:  cfg.GetEgressFilters(),
-	}
 	if err != nil {
 		var (
 			attrs trace.Attributes
@@ -434,7 +422,24 @@ func (s *server) SearchByID(ctx context.Context, req *payload.Search_IDRequest) 
 			}
 			return nil, err
 		}
-		res, err = s.doSearch(ctx, scfg, func(ctx context.Context, vc vald.Client, copts ...grpc.CallOption) (*payload.Search_Response, error) {
+		cfg := req.GetConfig()
+		cfg = &payload.Search_Config{
+			RequestId:          cfg.GetRequestId(),
+			Num:                cfg.GetNum(),
+			MinNum:             cfg.GetMinNum(),
+			Radius:             cfg.GetRadius(),
+			Epsilon:            cfg.GetEpsilon(),
+			Ratio:              cfg.GetRatio(),
+			Timeout:            cfg.GetTimeout(),
+			DisableAsyncRerank: cfg.GetDisableAsyncRerank(),
+			IngressFilters:     cfg.GetIngressFilters(),
+			EgressFilters:      cfg.GetEgressFilters(),
+		}
+		if req.Config != nil {
+			req.Config.Num = s.calculateNum(ctx, cfg.GetNum(), cfg.GetRatio())
+			req.Config.MinNum = 0
+		}
+		res, err = s.doSearch(ctx, cfg, func(ctx context.Context, vc vald.Client, copts ...grpc.CallOption) (*payload.Search_Response, error) {
 			return vc.SearchByID(ctx, req, copts...)
 		})
 		if err == nil {
@@ -450,10 +455,28 @@ func (s *server) SearchByID(ctx context.Context, req *payload.Search_IDRequest) 
 	}
 	res, err = s.Search(ctx, &payload.Search_Request{
 		Vector: vec.GetVector(),
-		Config: scfg,
+		Config: req.GetConfig(),
 	})
 	if err != nil {
-		res, err = s.doSearch(ctx, scfg, func(ctx context.Context, vc vald.Client, copts ...grpc.CallOption) (*payload.Search_Response, error) {
+		_, _, err := status.ParseError(err, codes.Internal, vald.SearchByIDRPCName+" API failed to process search request", reqInfo, resInfo, info.Get())
+		cfg := req.GetConfig()
+		cfg = &payload.Search_Config{
+			RequestId:          cfg.GetRequestId(),
+			Num:                cfg.GetNum(),
+			MinNum:             cfg.GetMinNum(),
+			Radius:             cfg.GetRadius(),
+			Epsilon:            cfg.GetEpsilon(),
+			Ratio:              cfg.GetRatio(),
+			Timeout:            cfg.GetTimeout(),
+			DisableAsyncRerank: cfg.GetDisableAsyncRerank(),
+			IngressFilters:     cfg.GetIngressFilters(),
+			EgressFilters:      cfg.GetEgressFilters(),
+		}
+		if req.Config != nil {
+			req.Config.Num = s.calculateNum(ctx, cfg.GetNum(), cfg.GetRatio())
+			req.Config.MinNum = 0
+		}
+		res, err = s.doSearch(ctx, cfg, func(ctx context.Context, vc vald.Client, copts ...grpc.CallOption) (*payload.Search_Response, error) {
 			return vc.SearchByID(ctx, req, copts...)
 		})
 		if err != nil {
@@ -467,6 +490,22 @@ func (s *server) SearchByID(ctx context.Context, req *payload.Search_IDRequest) 
 		}
 	}
 	return res, nil
+}
+
+func (s *server) calculateNum(ctx context.Context, num uint32, ratio float32) (n uint32) {
+	min := float64(s.replica) / float64(len(s.gateway.Addrs(ctx)))
+	if ratio < 0.0 {
+		return uint32(math.Ceil(float64(num) * min))
+	}
+	if ratio == 0.0 {
+		return num
+	}
+	n = uint32(math.Ceil(float64(num) * (min + ((1 - min) * float64(ratio)))))
+	sn := uint32(math.Ceil(float64(num) * min))
+	if n-1 < sn {
+		return sn
+	}
+	return n - 1
 }
 
 type DistPayload struct {
@@ -489,18 +528,184 @@ func (s *server) doSearch(ctx context.Context, cfg *payload.Search_Config,
 	min := int(cfg.GetMinNum())
 	res = new(payload.Search_Response)
 	res.Results = make([]*payload.Object_Distance, 0, s.gateway.GetAgentCount(ctx)*num)
-	dch := make(chan DistPayload, cap(res.GetResults())/2)
 	eg, ectx := errgroup.New(ctx)
-	var cancel context.CancelFunc
 	var timeout time.Duration
 	if to := cfg.GetTimeout(); to != 0 {
 		timeout = time.Duration(to)
 	} else {
 		timeout = s.timeout
 	}
+	var cancel context.CancelFunc
+	if cfg.GetDisableAsyncRerank() {
+		var mu sync.Mutex
+		ctx, cancel = context.WithTimeout(ectx, timeout)
+		defer cancel()
+		err := s.gateway.BroadCast(ctx, func(ctx context.Context, target string, vc vald.Client, copts ...grpc.CallOption) error {
+			sctx, sspan := trace.StartSpan(grpc.WrapGRPCMethod(ctx, "BroadCast/"+target), apiName+"/doSearch/"+target)
+			defer func() {
+				if sspan != nil {
+					sspan.End()
+				}
+			}()
+			r, err := f(sctx, vc, copts...)
+			switch {
+			case errors.Is(err, context.Canceled),
+				errors.Is(err, errors.ErrRPCCallFailed(target, context.Canceled)):
+				if sspan != nil {
+					sspan.RecordError(err)
+					sspan.SetAttributes(trace.StatusCodeCancelled(
+						errdetails.ValdGRPCResourceTypePrefix +
+							"/vald.v1.search.BroadCast/" +
+							target + " canceled: " + err.Error())...)
+					sspan.SetStatus(trace.StatusError, err.Error())
+				}
+			case errors.Is(err, context.DeadlineExceeded),
+				errors.Is(err, errors.ErrRPCCallFailed(target, context.DeadlineExceeded)):
+				if sspan != nil {
+					sspan.RecordError(err)
+					sspan.SetAttributes(trace.StatusCodeDeadlineExceeded(
+						errdetails.ValdGRPCResourceTypePrefix +
+							"/vald.v1.search.BroadCast/" +
+							target + " deadline_exceeded: " + err.Error())...)
+					sspan.SetStatus(trace.StatusError, err.Error())
+				}
+			case err != nil:
+				st, msg, err := status.ParseError(err, codes.Internal, "failed to parse search gRPC error response",
+					&errdetails.ResourceInfo{
+						ResourceType: errdetails.ValdGRPCResourceTypePrefix + "/vald.v1.search",
+						ResourceName: fmt.Sprintf("%s: %s(%s) to %s", apiName, s.name, s.ip, target),
+					})
+				if sspan != nil {
+					sspan.RecordError(err)
+					sspan.SetAttributes(trace.FromGRPCStatus(st.Code(), msg)...)
+					sspan.SetStatus(trace.StatusError, err.Error())
+				}
+				switch st.Code() {
+				case codes.Internal,
+					codes.Unavailable,
+					codes.ResourceExhausted:
+					return err
+				}
+			case r == nil || len(r.GetResults()) == 0:
+				err = status.WrapWithNotFound("failed to process search request", errors.ErrEmptySearchResult,
+					&errdetails.ResourceInfo{
+						ResourceType: errdetails.ValdGRPCResourceTypePrefix + "/vald.v1.search",
+						ResourceName: fmt.Sprintf("%s: %s(%s) to %s", apiName, s.name, s.ip, target),
+					})
+				if sspan != nil {
+					sspan.RecordError(err)
+					sspan.SetAttributes(trace.StatusCodeNotFound(err.Error())...)
+					sspan.SetStatus(trace.StatusError, err.Error())
+				}
+			}
+			mu.Lock()
+			res.Results = append(res.GetResults(), r.GetResults()...)
+			mu.Unlock()
+			return nil
+		})
+		if errors.Is(err, errors.ErrGRPCClientConnNotFound("*")) {
+			err = status.WrapWithInternal("search API connection not found", err,
+				&errdetails.RequestInfo{
+					// RequestId:   cfg.GetRequestId(),
+					ServingData: errdetails.Serialize(cfg),
+				},
+				&errdetails.ResourceInfo{
+					ResourceType: errdetails.ValdGRPCResourceTypePrefix + "/vald.v1.search",
+					ResourceName: fmt.Sprintf("%s: %s(%s) to %v", apiName, s.name, s.ip, s.gateway.Addrs(ctx)),
+				})
+			if span != nil {
+				span.RecordError(err)
+				span.SetAttributes(trace.StatusCodeInternal(err.Error())...)
+				span.SetStatus(trace.StatusError, err.Error())
+			}
+			return nil, err
+		}
+		slices.SortFunc(res.Results, func(left, right *payload.Object_Distance) bool {
+			return big.NewFloat(float64(left.GetDistance())).Cmp(big.NewFloat(float64(right.GetDistance()))) < 0
+		})
+		res.Results = slices.CompactFunc(res.Results, func(left, right *payload.Object_Distance) bool {
+			return left.GetId() == right.GetId()
+		})
+		if num != 0 && len(res.GetResults()) > num {
+			res.Results = res.GetResults()[:num]
+		}
+		if err != nil {
+			st, msg, err := status.ParseError(err, codes.Internal,
+				"failed to parse search gRPC error response",
+				&errdetails.RequestInfo{
+					RequestId:   cfg.GetRequestId(),
+					ServingData: errdetails.Serialize(cfg),
+				},
+				&errdetails.ResourceInfo{
+					ResourceType: errdetails.ValdGRPCResourceTypePrefix + "/vald.v1.search",
+					ResourceName: fmt.Sprintf("%s: %s(%s) to %v", apiName, s.name, s.ip, s.gateway.Addrs(ctx)),
+				}, info.Get())
+			if span != nil {
+				span.RecordError(err)
+				span.SetAttributes(trace.FromGRPCStatus(st.Code(), msg)...)
+				span.SetStatus(trace.StatusError, err.Error())
+			}
+			log.Warn(err)
+			if len(res.GetResults()) == 0 {
+				return nil, err
+			}
+		}
+		if num != 0 && len(res.GetResults()) == 0 {
+			if err == nil {
+				err = errors.ErrEmptySearchResult
+			}
+			err = status.WrapWithNotFound("error search result length is 0", err,
+				&errdetails.RequestInfo{
+					RequestId:   cfg.GetRequestId(),
+					ServingData: errdetails.Serialize(cfg),
+				},
+				&errdetails.ResourceInfo{
+					ResourceType: errdetails.ValdGRPCResourceTypePrefix + "/vald.v1.search",
+					ResourceName: fmt.Sprintf("%s: %s(%s) to %v", apiName, s.name, s.ip, s.gateway.Addrs(ctx)),
+				}, info.Get())
+			if span != nil {
+				span.RecordError(err)
+				span.SetAttributes(trace.StatusCodeNotFound(err.Error())...)
+				span.SetStatus(trace.StatusError, err.Error())
+			}
+			return nil, err
+		}
+
+		if 0 < min && len(res.GetResults()) < min {
+			if err == nil {
+				err = errors.ErrInsuffcientSearchResult
+			}
+			if span != nil {
+				span.RecordError(err)
+				span.SetAttributes(trace.StatusCodeNotFound(err.Error())...)
+				span.SetStatus(trace.StatusError, err.Error())
+			}
+			err = status.WrapWithNotFound(
+				fmt.Sprintf("error search result length is not enough required: %d, found: %d", min, len(res.GetResults())),
+				errors.ErrInsuffcientSearchResult,
+				&errdetails.RequestInfo{
+					RequestId:   cfg.GetRequestId(),
+					ServingData: errdetails.Serialize(cfg),
+				},
+				&errdetails.ResourceInfo{
+					ResourceType: errdetails.ValdGRPCResourceTypePrefix + "/vald.v1.search",
+					ResourceName: fmt.Sprintf("%s: %s(%s) to %v", apiName, s.name, s.ip, s.gateway.Addrs(ctx)),
+				}, info.Get(),
+			)
+			if span != nil {
+				span.RecordError(err)
+				span.SetAttributes(trace.StatusCodeNotFound(err.Error())...)
+				span.SetStatus(trace.StatusError, err.Error())
+			}
+			return nil, err
+		}
+		res.RequestId = cfg.GetRequestId()
+		return res, nil
+	}
 
 	var maxDist atomic.Value
 	maxDist.Store(big.NewFloat(math.MaxFloat64))
+	dch := make(chan DistPayload, cap(res.GetResults())/2)
 	ectx, cancel = context.WithTimeout(ectx, timeout)
 	eg.Go(safety.RecoverFunc(func() error {
 		defer cancel()

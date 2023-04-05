@@ -466,6 +466,11 @@
           "format": "int64",
           "description": "Maximum number of result to be returned."
         },
+        "minNum": {
+          "type": "integer",
+          "format": "int64",
+          "description": "Minimum number of result to be returned."
+        },
         "radius": {
           "type": "number",
           "format": "float",
@@ -476,10 +481,19 @@
           "format": "float",
           "description": "Search coefficient."
         },
+        "ratio": {
+          "type": "number",
+          "format": "float",
+          "description": "Search number of\tagent ratio."
+        },
         "timeout": {
           "type": "string",
           "format": "int64",
           "description": "Search timeout in nanoseconds."
+        },
+        "disableAsyncRerank": {
+          "type": "boolean",
+          "title": "Disables asynchronous reranking"
         },
         "ingressFilters": {
           "$ref": "#/definitions/v1FilterConfig",
@@ -488,11 +502,6 @@
         "egressFilters": {
           "$ref": "#/definitions/v1FilterConfig",
           "description": "Egress filter configurations."
-        },
-        "minNum": {
-          "type": "integer",
-          "format": "int64",
-          "description": "Minimum number of result to be returned."
         }
       },
       "description": "Represent search configuration."
