@@ -31,6 +31,8 @@
   - [Info.IPs](#payload-v1-Info-IPs)
   - [Info.Index](#payload-v1-Info-Index)
   - [Info.Index.Count](#payload-v1-Info-Index-Count)
+  - [Info.Index.Detail](#payload-v1-Info-Index-Detail)
+  - [Info.Index.Detail.CountsEntry](#payload-v1-Info-Index-Detail-CountsEntry)
   - [Info.Index.UUID](#payload-v1-Info-Index-UUID)
   - [Info.Index.UUID.Committed](#payload-v1-Info-Index-UUID-Committed)
   - [Info.Index.UUID.Uncommitted](#payload-v1-Info-Index-UUID-Uncommitted)
@@ -105,10 +107,10 @@
   - [Remove](#vald-v1-Remove)
 - [apis/proto/v1/vald/search.proto](#apis_proto_v1_vald_search-proto)
   - [Search](#vald-v1-Search)
-- [apis/proto/v1/vald/update.proto](#apis_proto_v1_vald_update-proto)
-  - [Update](#vald-v1-Update)
 - [apis/proto/v1/vald/upsert.proto](#apis_proto_v1_vald_upsert-proto)
   - [Upsert](#vald-v1-Upsert)
+- [apis/proto/v1/vald/update.proto](#apis_proto_v1_vald_update-proto)
+  - [Update](#vald-v1-Update)
 - [apis/proto/v1/rpc/error_details.proto](#apis_proto_v1_rpc_error_details-proto)
   - [BadRequest](#rpc-v1-BadRequest)
   - [BadRequest.FieldViolation](#rpc-v1-BadRequest-FieldViolation)
@@ -224,9 +226,10 @@ Represent the ingress filter service.
 
 Represent the index manager service.
 
-| Method Name | Request Type                           | Response Type                                                | Description                                     |
-| ----------- | -------------------------------------- | ------------------------------------------------------------ | ----------------------------------------------- |
-| IndexInfo   | [.payload.v1.Empty](#payload-v1-Empty) | [.payload.v1.Info.Index.Count](#payload-v1-Info-Index-Count) | Represent the RPC to get the index information. |
+| Method Name | Request Type                           | Response Type                                                  | Description                                                     |
+| ----------- | -------------------------------------- | -------------------------------------------------------------- | --------------------------------------------------------------- |
+| IndexInfo   | [.payload.v1.Empty](#payload-v1-Empty) | [.payload.v1.Info.Index.Count](#payload-v1-Info-Index-Count)   | Represent the RPC to get the index information.                 |
+| IndexDetail | [.payload.v1.Empty](#payload-v1-Empty) | [.payload.v1.Info.Index.Detail](#payload-v1-Info-Index-Detail) | Represent the RPC to get the index information for each agents. |
 
 <a name="apis_proto_v1_payload_payload-proto"></a>
 
@@ -347,6 +350,27 @@ Represent the index count message.
 | uncommitted | [uint32](#uint32) |       | The uncommitted index count. |
 | indexing    | [bool](#bool)     |       | The indexing index count.    |
 | saving      | [bool](#bool)     |       | The saving index count.      |
+
+<a name="payload-v1-Info-Index-Detail"></a>
+
+### Info.Index.Detail
+
+Represent the index count for each Agents message.
+
+| Field       | Type                                                                       | Label    | Description                        |
+| ----------- | -------------------------------------------------------------------------- | -------- | ---------------------------------- |
+| counts      | [Info.Index.Detail.CountsEntry](#payload-v1-Info-Index-Detail-CountsEntry) | repeated | count infos for each agents        |
+| replica     | [uint32](#uint32)                                                          |          | index replica of vald cluster      |
+| live_agents | [uint32](#uint32)                                                          |          | live agent replica of vald cluster |
+
+<a name="payload-v1-Info-Index-Detail-CountsEntry"></a>
+
+### Info.Index.Detail.CountsEntry
+
+| Field | Type                                             | Label | Description |
+| ----- | ------------------------------------------------ | ----- | ----------- |
+| key   | [string](#string)                                |       |             |
+| value | [Info.Index.Count](#payload-v1-Info-Index-Count) |       |             |
 
 <a name="payload-v1-Info-Index-UUID"></a>
 
@@ -1115,24 +1139,6 @@ Search service provides ways to search indexed vectors.
 | MultiLinearSearch      | [.payload.v1.Search.MultiRequest](#payload-v1-Search-MultiRequest)     | [.payload.v1.Search.Responses](#payload-v1-Search-Responses)                  | A method to linear search indexed vectors by multiple vectors in a single request. |
 | MultiLinearSearchByID  | [.payload.v1.Search.MultiIDRequest](#payload-v1-Search-MultiIDRequest) | [.payload.v1.Search.Responses](#payload-v1-Search-Responses)                  | A method to linear search indexed vectors by multiple IDs in a single request.     |
 
-<a name="apis_proto_v1_vald_update-proto"></a>
-
-<p align="right"><a href="#top">Top</a></p>
-
-## apis/proto/v1/vald/update.proto
-
-<a name="vald-v1-Update"></a>
-
-### Update
-
-Update service provides ways to update indexed vectors.
-
-| Method Name  | Request Type                                                       | Response Type                                                                 | Description                                                             |
-| ------------ | ------------------------------------------------------------------ | ----------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| Update       | [.payload.v1.Update.Request](#payload-v1-Update-Request)           | [.payload.v1.Object.Location](#payload-v1-Object-Location)                    | A method to update an indexed vector.                                   |
-| StreamUpdate | [.payload.v1.Update.Request](#payload-v1-Update-Request) stream    | [.payload.v1.Object.StreamLocation](#payload-v1-Object-StreamLocation) stream | A method to update multiple indexed vectors by bidirectional streaming. |
-| MultiUpdate  | [.payload.v1.Update.MultiRequest](#payload-v1-Update-MultiRequest) | [.payload.v1.Object.Locations](#payload-v1-Object-Locations)                  | A method to update multiple indexed vectors in a single request.        |
-
 <a name="apis_proto_v1_vald_upsert-proto"></a>
 
 <p align="right"><a href="#top">Top</a></p>
@@ -1150,6 +1156,24 @@ Upsert service provides ways to insert/update vectors.
 | Upsert       | [.payload.v1.Upsert.Request](#payload-v1-Upsert-Request)           | [.payload.v1.Object.Location](#payload-v1-Object-Location)                    | A method to insert/update a vector.                                    |
 | StreamUpsert | [.payload.v1.Upsert.Request](#payload-v1-Upsert-Request) stream    | [.payload.v1.Object.StreamLocation](#payload-v1-Object-StreamLocation) stream | A method to insert/update multiple vectors by bidirectional streaming. |
 | MultiUpsert  | [.payload.v1.Upsert.MultiRequest](#payload-v1-Upsert-MultiRequest) | [.payload.v1.Object.Locations](#payload-v1-Object-Locations)                  | A method to insert/update multiple vectors in a single request.        |
+
+<a name="apis_proto_v1_vald_update-proto"></a>
+
+<p align="right"><a href="#top">Top</a></p>
+
+## apis/proto/v1/vald/update.proto
+
+<a name="vald-v1-Update"></a>
+
+### Update
+
+Update service provides ways to update indexed vectors.
+
+| Method Name  | Request Type                                                       | Response Type                                                                 | Description                                                             |
+| ------------ | ------------------------------------------------------------------ | ----------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| Update       | [.payload.v1.Update.Request](#payload-v1-Update-Request)           | [.payload.v1.Object.Location](#payload-v1-Object-Location)                    | A method to update an indexed vector.                                   |
+| StreamUpdate | [.payload.v1.Update.Request](#payload-v1-Update-Request) stream    | [.payload.v1.Object.StreamLocation](#payload-v1-Object-StreamLocation) stream | A method to update multiple indexed vectors by bidirectional streaming. |
+| MultiUpdate  | [.payload.v1.Update.MultiRequest](#payload-v1-Update-MultiRequest) | [.payload.v1.Object.Locations](#payload-v1-Object-Locations)                  | A method to update multiple indexed vectors in a single request.        |
 
 <a name="apis_proto_v1_rpc_error_details-proto"></a>
 
