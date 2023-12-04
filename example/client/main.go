@@ -122,7 +122,6 @@ func main() {
 
 		b, _ := json.MarshalIndent(res.GetResults(), "", " ")
 		glg.Infof("%d - Results : %s\n\n", i+1, string(b))
-		time.Sleep(1 * time.Second)
 	}
 	glg.Infof("Finish searching %d times", testCount)
 
